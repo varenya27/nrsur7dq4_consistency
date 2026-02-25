@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=64
 #SBATCH --time=10:00:00
-#SBATCH --output=run_%j.log
+#SBATCH --output=logs/run_%j.log
 #SBATCH --partition=cpu,cpu-preempt,umd-cscdr-cpu
 #SBATCH --no-requeue
 #SBATCH --mail-user=vupadhyaya@umassd.edu
@@ -19,6 +19,6 @@ cat large_errors_wfgen_rank*.txt > large_errors_wfgen_20hz.txt && rm large_error
 cat large_errors_wrapper_rank*.txt > large_errors_wrapper_20hz.txt && rm large_errors_wrapper_rank*.txt
 
 mpirun -np 64 python diff_param_space_batch.py --fmin 0
-cat large_errors_wrapper_rank*.txt > large_errors_wrapper_0hz.txt && rm large_errors_wfgen_rank*.txt
-cat large_errors_wfgen_rank*.txt > large_errors_wfgen_0hz.txt && rm large_errors_wrapper_rank*.txt
+cat large_errors_wfgen_rank*.txt > large_errors_wfgen_0hz.txt && rm large_errors_wfgen_rank*.txt
+cat large_errors_wrapper_rank*.txt > large_errors_wrapper_0hz.txt && rm large_errors_wrapper_rank*.txt
 
