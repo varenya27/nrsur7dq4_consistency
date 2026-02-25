@@ -15,8 +15,7 @@ comparison is done for:
 
 import numpy as np 
 from gwsignal4gwsurr.gwsurr import NRSur7dq4_gwsurr
-from gwsignal4gwsurr.NRSur7dq4_wrapper import NRSur7dq4_wrapper as NRSur7dq4_gwsurr_wrapper
-from gwsignal4gwsurr.NRSur7dq4_LALSim_wrapper import NRSur7dq4_wrapper as NRSur7dq4_LALSim_gwsurr_wrapper
+from gwsignal4gwsurr.utils_bilby import SurrogateWaveformGenerator
 from bilby.gw.conversion import bilby_to_lalsimulation_spins
 from bilby.gw.conversion import chirp_mass_and_mass_ratio_to_component_masses as convert_mass
 import astropy.units as u
@@ -143,7 +142,7 @@ phi_ref=0.
 #-------------------------------
 
 #----------- freqs ----------------
-f22_start = 0.
+f22_start = 20.
 f_ref = 20.000
 maximum_frequency = 2048. 
 freqs = np.arange(0,maximum_frequency+0.25,0.25)
@@ -250,36 +249,44 @@ print('DBUG used params for wfgen', mass1,mass2,spin1x,spin1y,spin1z,spin2x,spin
 #  WRAPPER CHECK
 #======================================================
 
-# generate gwsignal4gwsurr gwsurr waveforms
-sur_gwsignal = NRSur7dq4_gwsurr_wrapper(
-freqs, mass1,mass2,a_1,a_2,tilt_1,tilt_2,phi_12, phi_jl,distance,theta_jn,phi_ref,**waveform_arguments
+parameters = dict(
+    mass_1 = mass1,
+    mass_2 = mass2,
+    a_1 = a_1,
+    a_2 = a_2,
+    tilt_1 = tilt_1,
+    tilt_2 = tilt_2,
+    phi_12 = phi_12,
+    phi_jl = phi_jl,
+    theta_jn = theta_jn,
+    luminosity_distance = distance,
+    phase = phi_ref,
+    reference_frequency = 20.0,
 )
+wf_args_gwsignal_gwsurr = waveform_arguments.copy()
+wf_args_gwsignal_gwsurr['waveform_approximant']='NRSur7dq4'
+wf_args_gwsignal_lalsim = waveform_arguments.copy()
+wf_args_gwsignal_lalsim['waveform_approximant']='NRSur7dq4_LALSim'
+wf_args_bilby_lalbin = wf_args_gwsignal_gwsurr.copy()
 
-# generate gwsignal4gwsurr lalsim waveforms
-sur_gwsignal_lal = NRSur7dq4_LALSim_gwsurr_wrapper(
-freqs, mass1,mass2,a_1,a_2,tilt_1,tilt_2,phi_12, phi_jl,distance,theta_jn,phi_ref,**waveform_arguments
-)
+kwargs_gwsignal_gwsurr = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_gwsignal_gwsurr}
+kwargs_gwsignal_lalsim = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_gwsignal_lalsim}
+kwargs_bilby_lalbin = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_bilby_lalbin,'use_bilby':True}
 
-# generate bilby waveforms
-waveform_polarizations = lal_binary_black_hole(
-    freqs, mass1,mass2,distance,a_1,tilt_1,phi_12,a_2,tilt_2, phi_jl,theta_jn,phi_ref,**waveform_arguments
-)
+waveformGenerator_gwsignal_gwsurr = SurrogateWaveformGenerator(**kwargs_gwsignal_gwsurr)
+waveformGenerator_gwsignal_lalsim = SurrogateWaveformGenerator(**kwargs_gwsignal_lalsim)
+waveformGenerator_bilby_lalbin = SurrogateWaveformGenerator(**kwargs_bilby_lalbin)
 
-# rename variables
-if sur_gwsignal is not None and sur_gwsignal_lal is not None and waveform_polarizations is not None:
-    hp_gwsig_gwsurr = sur_gwsignal['plus']
-    hc_gwsig_gwsurr = sur_gwsignal['cross']
-    hp_gwsig_lalsim = sur_gwsignal_lal['plus']
-    hc_gwsig_lalsim = sur_gwsignal_lal['cross']
-    hp_bilby_lalbin = waveform_polarizations['plus']
-    hc_bilby_lalbin = waveform_polarizations['cross']
-else: quit()
+fd_strain_gwsignal_gwsurr = waveformGenerator_gwsignal_gwsurr.frequency_domain_strain(parameters)
+fd_strain_gwsignal_lalsim = waveformGenerator_gwsignal_lalsim.frequency_domain_strain(parameters)
+fd_strain_bilby = waveformGenerator_bilby_lalbin.frequency_domain_strain(parameters)
 
+
+hp_gwsig_gwsurr, hc_gwsig_gwsurr = fd_strain_gwsignal_gwsurr['plus'], fd_strain_gwsignal_gwsurr['cross']
+hp_gwsig_lalsim, hc_gwsig_lalsim = fd_strain_gwsignal_lalsim['plus'], fd_strain_gwsignal_lalsim['cross']
+hp_bilby_lalbin, hc_bilby_lalbin = fd_strain_bilby['plus'], fd_strain_bilby['cross']
 
 #======================================================
-#  PLOT EVERYTHING
-#======================================================
-plt.figure(figsize=(10,4))
 fig,ax = plt.subplots(2,2, figsize=(10,8), sharex=True)
 
 #----------- NRSur7dq4_gwsurr vs SimInspiralFD --------------

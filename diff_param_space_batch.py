@@ -12,21 +12,17 @@ comparison is done for:
 
 import numpy as np 
 from gwsignal4gwsurr.gwsurr import NRSur7dq4_gwsurr
-from gwsignal4gwsurr.NRSur7dq4_wrapper import NRSur7dq4_wrapper as NRSur7dq4_gwsurr_wrapper
-from gwsignal4gwsurr.NRSur7dq4_LALSim_wrapper import NRSur7dq4_wrapper as NRSur7dq4_LALSim_gwsurr_wrapper
+from gwsignal4gwsurr.utils_bilby import SurrogateWaveformGenerator
 from bilby.gw.conversion import bilby_to_lalsimulation_spins
-from bilby.gw.conversion import chirp_mass_and_mass_ratio_to_component_masses as convert_mass
 import astropy.units as u
 from bilby.core.utils.constants import solar_mass
 import matplotlib.pyplot as plt
 import lal 
 import lalsimulation as lalsim
-import time
-from bilby.gw.source import lal_binary_black_hole
-from pandas.core.generic import freq_to_period_freqstr
 from mpi4py import MPI
 import argparse
 
+print('done importing')
 parser = argparse.ArgumentParser(description='testing parameter space for lalsim/gwsignal NRSur7dq4',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--fmin', type=float, default=20., help='minimum frequency')
@@ -67,6 +63,7 @@ waveform_arguments = {
 #----------------------------------------
 
 
+print('hello')
 sur_gwsignal_ = NRSur7dq4_gwsurr()
 def get_polarizations(
     mass1 = 42.,
@@ -80,24 +77,26 @@ def get_polarizations(
     distance=410.,
     theta_jn=np.pi,
     phi_ref=0.,
+    waveformGenerator_gwsignal_gwsurr=None,
+    waveformGenerator_gwsignal_lalsim=None,
+    waveformGenerator_bilby_lalbin=None
 ):
-    current_params= dict(
-        mass1 = mass1,
-        mass2 = mass2,
+    parameters = dict(
+        mass_1 = mass1,
+        mass_2 = mass2,
         a_1 = a_1,
-        a_2= a_2,
-        tilt_1=tilt_1,
-        tilt_2=tilt_2,
-        phi_12=phi_12,
-        phi_jl=phi_jl ,
-        distance=distance,
-        theta_jn=theta_jn,
-        phi_ref=0.)
-    if current_params == testing_params:
-        print('INFO FOUND THE BUGGER THIS ERROR BETTER BE HIGH')
-    #------------------ convert spins --------------------------
+        a_2 = a_2,
+        tilt_1 = tilt_1,
+        tilt_2 = tilt_2,
+        phi_12 = phi_12,
+        phi_jl = phi_jl,
+        theta_jn = theta_jn,
+        luminosity_distance = distance,
+        phase = phi_ref,
+        reference_frequency = 20.0,
+    )
 
-    # print('DBUG converting', theta_jn, phi_jl, tilt_1, tilt_2, phi_12, a_1, a_2, mass1, mass2, f_ref, phi_ref)
+    #------------------ convert spins --------------------------
     iota, spin1x, spin1y, spin1z, spin2x, spin2y, spin2z = bilby_to_lalsimulation_spins(
     theta_jn = theta_jn,
     phi_jl =  phi_jl,
@@ -111,14 +110,11 @@ def get_polarizations(
     reference_frequency = f_ref,
     phase = phi_ref
     )
-    # print('DBUG converted spins', iota, spin1x, spin1y, spin1z, spin2x, spin2y, spin2z)
     #-----------------------------------------------------------
 
     #======================================================
     #  WF GENERATION CHECK
     #======================================================
-
-
 
     hp_gwsig_genfd,hc_gwsig_genfd=  sur_gwsignal_.generate_fd_polarizations_from_td(
         mass1=mass1*u.Msun,
@@ -156,37 +152,23 @@ def get_polarizations(
     hp_lal_siminspiral=hp_lal_siminspiral.data.data
     hc_lal_siminspiral=hc_lal_siminspiral.data.data
 
-    # print('DBUG used params for wfgen', mass1,mass2,spin1x,spin1y,spin1z,spin2x,spin2y,spin2z,distance,iota,phi_ref,waveform_arguments['minimum_frequency'],maximum_frequency,waveform_arguments['reference_frequency'],freqs[1]-freqs[0])
-
-
     #======================================================
     #  WRAPPER CHECK
     #======================================================
 
-    # generate gwsignal4gwsurr gwsurr waveforms
-    sur_gwsignal = NRSur7dq4_gwsurr_wrapper(
-    freqs, mass1,mass2,a_1,a_2,tilt_1,tilt_2,phi_12, phi_jl,distance,theta_jn,phi_ref,**waveform_arguments
-    )
 
-    # generate gwsignal4gwsurr lalsim waveforms
-    sur_gwsignal_lal = NRSur7dq4_LALSim_gwsurr_wrapper(
-    freqs, mass1,mass2,a_1,a_2,tilt_1,tilt_2,phi_12, phi_jl,distance,theta_jn,phi_ref,**waveform_arguments
-    )
+    if not isinstance(waveformGenerator_gwsignal_gwsurr, SurrogateWaveformGenerator) or not isinstance(waveformGenerator_gwsignal_lalsim, SurrogateWaveformGenerator) or not isinstance(waveformGenerator_bilby_lalbin, SurrogateWaveformGenerator):
+        quit()
+        
+    fd_strain_gwsignal_gwsurr = waveformGenerator_gwsignal_gwsurr.frequency_domain_strain(parameters)
+    fd_strain_gwsignal_lalsim = waveformGenerator_gwsignal_lalsim.frequency_domain_strain(parameters)
+    fd_strain_bilby = waveformGenerator_bilby_lalbin.frequency_domain_strain(parameters)
 
-    # generate bilby waveforms
-    waveform_polarizations = lal_binary_black_hole(
-        freqs, mass1,mass2,distance,a_1,tilt_1,phi_12,a_2,tilt_2, phi_jl,theta_jn,phi_ref,**waveform_arguments
-    )
 
-    # rename variables
-    if sur_gwsignal is not None and sur_gwsignal_lal is not None and waveform_polarizations is not None:
-        hp_gwsig_gwsurr = sur_gwsignal['plus']
-        hc_gwsig_gwsurr = sur_gwsignal['cross']
-        hp_gwsig_lalsim = sur_gwsignal_lal['plus']
-        hc_gwsig_lalsim = sur_gwsignal_lal['cross']
-        hp_bilby_lalbin = waveform_polarizations['plus']
-        hc_bilby_lalbin = waveform_polarizations['cross']
-    else: quit()
+    hp_gwsig_gwsurr, hc_gwsig_gwsurr = fd_strain_gwsignal_gwsurr['plus'], fd_strain_gwsignal_gwsurr['cross']
+    hp_gwsig_lalsim, hc_gwsig_lalsim = fd_strain_gwsignal_lalsim['plus'], fd_strain_gwsignal_lalsim['cross']
+    hp_bilby_lalbin, hc_bilby_lalbin = fd_strain_bilby['plus'], fd_strain_bilby['cross']
+
     return (
         hp_gwsig_genfd, hc_gwsig_genfd,
         hp_lal_siminspiral, hc_lal_siminspiral,
@@ -241,6 +223,21 @@ size = comm.Get_size()
 rank = comm.Get_rank()
 
 params_all = list(iter_params())
+wf_args_gwsignal_gwsurr = waveform_arguments.copy()
+wf_args_gwsignal_gwsurr['waveform_approximant']='NRSur7dq4'
+wf_args_gwsignal_lalsim = waveform_arguments.copy()
+wf_args_gwsignal_lalsim['waveform_approximant']='NRSur7dq4_LALSim'
+wf_args_bilby_lalbin = wf_args_gwsignal_gwsurr.copy()
+
+kwargs_gwsignal_gwsurr = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_gwsignal_gwsurr}
+kwargs_gwsignal_lalsim = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_gwsignal_lalsim}
+kwargs_bilby_lalbin = {'duration': 4.0, 'start_time': 1126259598.0, 'sampling_frequency': 4096,'waveform_arguments':wf_args_bilby_lalbin,'use_bilby':True}
+
+waveformGenerator_gwsignal_gwsurr = SurrogateWaveformGenerator(**kwargs_gwsignal_gwsurr)
+waveformGenerator_gwsignal_lalsim = SurrogateWaveformGenerator(**kwargs_gwsignal_lalsim)
+waveformGenerator_bilby_lalbin = SurrogateWaveformGenerator(**kwargs_bilby_lalbin)
+
+print('PROG starting evaluation')
 for i,params in enumerate(params_all):
     if i % size != rank:
         continue
@@ -263,6 +260,9 @@ for i,params in enumerate(params_all):
         distance=distance,
         theta_jn=theta_jn,
         phi_ref=0.,
+        waveformGenerator_gwsignal_gwsurr=waveformGenerator_gwsignal_gwsurr,
+        waveformGenerator_gwsignal_lalsim=waveformGenerator_gwsignal_lalsim,
+        waveformGenerator_bilby_lalbin=waveformGenerator_bilby_lalbin
     )
     #------------ compute errors --------------
     hp_diff_wfgen   = hp_lal_siminspiral - hp_gwsig_genfd
